@@ -1,18 +1,15 @@
 package com.bergerkiller.bukkit.tc.rails.logic;
 
-import com.bergerkiller.bukkit.common.bases.IntVector3;
-import com.bergerkiller.bukkit.common.entity.type.CommonMinecart;
 import com.bergerkiller.bukkit.common.utils.FaceUtil;
-import com.bergerkiller.bukkit.tc.TCConfig;
 import com.bergerkiller.bukkit.tc.controller.MinecartMember;
 import com.bergerkiller.bukkit.tc.controller.components.RailPath;
-import com.bergerkiller.bukkit.tc.utils.SlowdownMode;
 
 import org.bukkit.block.BlockFace;
 import org.bukkit.util.Vector;
 
 public class RailLogicVertical extends RailLogic {
     private static final RailLogicVertical[] values = new RailLogicVertical[4];
+    public static final double XZ_POS_OFFSET = (0.5 - RailLogicHorizontal.Y_POS_OFFSET);
 
     static {
         for (int i = 0; i < 4; i++) {
@@ -50,29 +47,20 @@ public class RailLogicVertical extends RailLogic {
     }
 
     @Override
-    public void getFixedPosition(Vector position, IntVector3 railPos) {
-        position.setX(railPos.midX());
-        position.setZ(railPos.midZ());
-    }
-
-    @Override
     public void setForwardVelocity(MinecartMember<?> member, double force) {
         member.getEntity().vel.setY(member.getDirection().getModY() * force);
     }
 
     @Override
-    public RailPath getPath() {
-        if (this.railPath == RailPath.EMPTY) {
-            // Initialize the rail path, making use of getFixedPosition for each node
-            Vector p1 = new Vector(0.5, 0.0, 0.5);
-            Vector p2 = new Vector(0.5, 1.0, 0.5);
-            this.getFixedPosition(p1, IntVector3.ZERO);
-            this.getFixedPosition(p2, IntVector3.ZERO);
-            this.railPath = new RailPath.Builder()
-                    .up(this.getDirection().getOppositeFace())
-                    .add(p1).add(p2).build();
-        }
-        return this.railPath;
+    protected RailPath createPath() {
+        // Initialize the rail path, making use of getFixedPosition for each node
+        double dx = 0.5 + XZ_POS_OFFSET * this.getDirection().getModX();
+        double dz = 0.5 + XZ_POS_OFFSET * this.getDirection().getModZ();
+        Vector p1 = new Vector(dx, 0.0, dz);
+        Vector p2 = new Vector(dx, 1.0, dz);
+        return new RailPath.Builder()
+                .up(this.getDirection().getOppositeFace())
+                .add(p1).add(p2).build();
     }
 
     @Override
@@ -80,24 +68,4 @@ public class RailLogicVertical extends RailLogic {
         return true;
     }
 
-    @Override
-    public double getGravityMultiplier(MinecartMember<?> member) {
-        if (member.getGroup().getProperties().isSlowingDown(SlowdownMode.GRAVITY)) {
-            return TCConfig.legacyVerticalGravity ? 
-                    MinecartMember.VERTRAIL_MULTIPLIER_LEGACY : MinecartMember.SLOPE_VELOCITY_MULTIPLIER;
-        }
-        return 0.0;
-    }
-
-    @Override
-    public void onPreMove(MinecartMember<?> member) {
-        final CommonMinecart<?> entity = member.getEntity();
-        // Horizontal rail force to motY
-        entity.vel.y.add(entity.vel.xz.length() * member.getDirection().getModY());
-        entity.vel.xz.setZero();
-        // Position update
-        Vector position = entity.loc.vector();
-        this.getFixedPosition(position, member.getBlockPos());
-        entity.loc.set(position);
-    }
 }

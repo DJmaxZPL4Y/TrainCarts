@@ -171,7 +171,7 @@ public enum CollisionMode {
                     if (this == DAMAGENODROPS) {
                         TCListener.cancelNextDrops = true;
                     }
-                    Double minecartEnergy = member.getForceSquared() * member.getProperties().getTrainProperties().getCollisionDamage();
+                    double minecartEnergy = member.getEntity().vel.lengthSquared() * member.getProperties().getTrainProperties().getCollisionDamage();
                     damage(member, entity, minecartEnergy);
                     push(member, entity);
                     if (this == DAMAGENODROPS) {
@@ -240,7 +240,7 @@ public enum CollisionMode {
     /*
      * Impart damage to an entity that a minecart hits
      */
-    private void damage(MinecartMember<?> member, Entity entity, Double damageAmount) {
+    private void damage(MinecartMember<?> member, Entity entity, double damageAmount) {
         if (entity instanceof LivingEntity) {
             boolean old = EntityUtil.isInvulnerable(entity);
             EntityUtil.setInvulnerable(entity, false);

@@ -3,7 +3,6 @@ package com.bergerkiller.bukkit.tc.rails.logic;
 import org.bukkit.block.BlockFace;
 import org.bukkit.util.Vector;
 
-import com.bergerkiller.bukkit.common.bases.IntVector3;
 import com.bergerkiller.bukkit.common.utils.FaceUtil;
 import com.bergerkiller.bukkit.tc.controller.components.RailPath;
 
@@ -38,38 +37,55 @@ public class RailLogicVerticalSlopeUpsideDownA extends RailLogicVerticalSlopeBas
     }
 
     @Override
-    public RailPath getPath() {
-        if (this.railPath == RailPath.EMPTY) {
-            // Initialize the rail path, making use of getFixedPosition for each node
-            // This type of logic has a path consisting of two line segments
-            // One segment is vertical, and leads to somewhere in the middle
-            // The other segment is sloped from the middle to the other end
-            // The x/z coordinates are asserted from the y-coordinate
-            Vector p1 = new Vector(0.5, -1.0, 0.5);
-            Vector p2 = new Vector(0.5, -1.0 + this.getHalfOffset(), 0.5);
-            Vector p3 = new Vector(0.5, -1.0 + this.getHalfOffset() + 0.5, 0.5);
-
-            if (this.alongZ) {
-                p3.setZ(0.5 + 0.5 * (double) this.getDirection().getModZ());
-            } else if (this.alongX) {
-                p3.setX(0.5 + 0.5 * (double) this.getDirection().getModX());
-            }
-
-            this.railPath = new RailPath.Builder()
-                    .add(p1, this.getDirection())
-                    .add(p2, this.getDirection())
-                    .add(p3, BlockFace.DOWN).build();
+    protected RailPath createPath() {
+        double base_y = Y_POS_OFFSET_UPSIDEDOWN + Y_POS_OFFSET_UPSIDEDOWN_SLOPE;
+        Vector p1, p2;
+        switch (this.getDirection()) {
+        case NORTH:
+            p1 = new Vector(0.5, base_y+1.0, 0.0);
+            p2 = new Vector(0.5, base_y, 1.0);
+            break;
+        case EAST:
+            p1 = new Vector(1.0, base_y+1.0, 0.5);
+            p2 = new Vector(0.0, base_y, 0.5);
+            break;
+        case SOUTH:
+            p1 = new Vector(0.5, base_y+1.0, 1.0);
+            p2 = new Vector(0.5, base_y, 0.0);
+            break;
+        case WEST:
+        default:
+            p1 = new Vector(0.0, base_y+1.0, 0.5);
+            p2 = new Vector(1.0, base_y, 0.5);
+            break;
         }
-        return this.railPath;
+
+        // Aligns p2 to the bottom floor of the block this logic is for
+        // This makes sure RailLogicVerticalUpsideDownC continues working
+        if (p2.getY() < 0.0) {
+            Vector d = p2.clone().subtract(p1).normalize();
+            d.multiply(p2.getY() / d.getY());
+            p2.subtract(d);
+        }
+
+        // Aligns to the x/z border instead
+        /*
+        {
+            Vector d = p2.clone().subtract(p1).normalize();
+            if (this.getDirection().getModX() != 0) {
+                double dx = 0.5 - RailLogicVertical.XZ_POS_OFFSET * this.getDirection().getModX();
+                d.multiply((p2.getX() - dx) / d.getX());
+            } else {
+                double dz = 0.5 - RailLogicVertical.XZ_POS_OFFSET * this.getDirection().getModZ();
+                d.multiply((p2.getZ() - dz) / d.getZ());
+            }
+            p2.subtract(d);
+        }
+        */
+
+        return new RailPath.Builder()
+                .up(BlockFace.DOWN)
+                .add(p1).add(p2).build();
     }
 
-    @Override
-    public boolean isVerticalHalf(double y, IntVector3 blockPos) {
-        return (y + 0.0001) < (blockPos.y + this.getHalfOffset());
-    }
-
-    @Override
-    protected double getHalfOffset() {
-        return 0.5 + Y_POS_OFFSET_UPSIDEDOWN + Y_POS_OFFSET_UPSIDEDOWN_SLOPE;
-    }
 }

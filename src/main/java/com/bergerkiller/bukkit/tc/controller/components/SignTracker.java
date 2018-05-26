@@ -1,15 +1,17 @@
 package com.bergerkiller.bukkit.tc.controller.components;
 
 import com.bergerkiller.bukkit.common.ToggledState;
+import com.bergerkiller.bukkit.tc.cache.RailSignCache.TrackedSign;
 import com.bergerkiller.bukkit.tc.detector.DetectorRegion;
+
 import org.bukkit.block.Block;
 
 import java.util.*;
 
 /**
- * Keeps track of the active rails, signs and detector regions
+ * Keeps track of the active signs and detector regions from rail information
  */
-public abstract class BlockTracker {
+public abstract class SignTracker {
     protected static final Set<TrackedSign> blockBuffer = new HashSet<TrackedSign>();
     protected final Map<Block, TrackedSign> activeSigns = new LinkedHashMap<Block, TrackedSign>();
     protected final List<DetectorRegion> detectorRegions = new ArrayList<>(0);
@@ -45,12 +47,6 @@ public abstract class BlockTracker {
             }
             activeSigns.clear();
         }
-    }
-
-    /**
-     * Tells detector regions (and signs?) that the tracker owner has unloaded
-     */
-    public void unload() {
     }
 
     /**
@@ -123,23 +119,4 @@ public abstract class BlockTracker {
         }
     }
 
-    public class TrackedSign {
-        public final Block signBlock;
-        public final Block railsBlock;
-
-        public TrackedSign(Block signBlock, Block railsBlock) {
-            this.signBlock = signBlock;
-            this.railsBlock = railsBlock;
-        }
-
-        @Override
-        public int hashCode() {
-            return this.signBlock.hashCode();
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            return ((TrackedSign) o).signBlock.equals(this.signBlock);
-        }
-    }
 }

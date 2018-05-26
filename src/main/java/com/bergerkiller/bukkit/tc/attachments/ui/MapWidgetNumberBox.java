@@ -8,6 +8,7 @@ import com.bergerkiller.bukkit.common.map.MapFont;
 import com.bergerkiller.bukkit.common.map.MapPlayerInput;
 import com.bergerkiller.bukkit.common.map.MapFont.Alignment;
 import com.bergerkiller.bukkit.common.map.widgets.MapWidget;
+import com.bergerkiller.bukkit.common.map.widgets.MapWidgetButton;
 import com.bergerkiller.bukkit.common.utils.MathUtil;
 
 /**
@@ -17,13 +18,18 @@ public class MapWidgetNumberBox extends MapWidget {
     private double _value = 0.0;
     private double _min = Double.NEGATIVE_INFINITY;
     private double _max = Double.POSITIVE_INFINITY;
+    private double _incr = 0.01;
     private final MapWidgetArrow nav_left = new MapWidgetArrow(BlockFace.WEST);
     private final MapWidgetArrow nav_right = new MapWidgetArrow(BlockFace.EAST);
 
     public MapWidgetNumberBox() {
         this.setFocusable(true);
     }
-    
+
+    public void setIncrement(double increment) {
+        this._incr = increment;
+    }
+
     public void setRange(double min, double max) {
         this._min = min;
         this._max = max;
@@ -65,10 +71,10 @@ public class MapWidgetNumberBox extends MapWidget {
     public void onKeyPressed(MapKeyEvent event) {
         if (event.getKey() == MapPlayerInput.Key.LEFT) {
             nav_left.sendFocus();
-            this.addValue(-0.01, event.getRepeat());
+            this.addValue(-this._incr, event.getRepeat());
         } else if (event.getKey() == MapPlayerInput.Key.RIGHT) {
             nav_right.sendFocus();
-            this.addValue(0.01, event.getRepeat());
+            this.addValue(this._incr, event.getRepeat());
         } else {
             super.onKeyPressed(event);
         }
@@ -119,11 +125,17 @@ public class MapWidgetNumberBox extends MapWidget {
     public void onDraw() {
         int offset = nav_left.getWidth() + 1;
 
+        MapWidgetButton.fillBackground(this.view.getView(offset + 1, 1, getWidth() - 2 * offset - 2, getHeight() - 2), this.isEnabled(), this.isFocused());
         this.view.drawRectangle(offset, 0, getWidth() - 2 * offset, getHeight(), this.isFocused() ? MapColorPalette.COLOR_RED : MapColorPalette.COLOR_BLACK);
 
         String text = Double.toString(MathUtil.round(getValue(), 4));
         this.view.setAlignment(Alignment.MIDDLE);
         this.view.draw(MapFont.MINECRAFT, getWidth() / 2, 2, MapColorPalette.COLOR_WHITE, text);
+    }
+
+    @Override
+    public void onActivate() {
+        this.setValue(0.0);
     }
 
     public void onValueChanged() {

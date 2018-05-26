@@ -6,6 +6,7 @@ import com.bergerkiller.bukkit.common.utils.CommonUtil;
 import com.bergerkiller.bukkit.common.utils.LogicUtil;
 import com.bergerkiller.bukkit.common.utils.ParseUtil;
 import com.bergerkiller.bukkit.tc.Permission;
+import com.bergerkiller.bukkit.tc.TCConfig;
 import com.bergerkiller.bukkit.tc.TrainCarts;
 import com.bergerkiller.bukkit.tc.Util;
 import com.bergerkiller.bukkit.tc.attachments.config.AttachmentModel;
@@ -69,10 +70,19 @@ public class CartProperties extends CartPropertiesStore implements IProperties {
         return "cart";
     }
 
+    /**
+     * Sets the holder of these properties. Internal use only.
+     * 
+     * @param holder
+     */
+    protected void setHolder(MinecartMember<?> holder) {
+        this.member.set(holder);
+    }
+
     @Override
     public MinecartMember<?> getHolder() {
         MinecartMember<?> member = this.member.get();
-        if (member == null || !member.isInteractable() || !member.getEntity().getUniqueId().equals(this.uuid)) {
+        if (member == null || member.getEntity() == null || !member.getEntity().getUniqueId().equals(this.uuid)) {
             return this.member.set(MinecartMemberStore.getFromUID(this.uuid));
         } else {
             return member;
@@ -466,6 +476,9 @@ public class CartProperties extends CartPropertiesStore implements IProperties {
         if (key.equals("exitoffset")) {
             Vector vec = Util.parseVector(arg, null);
             if (vec != null) {
+                if (vec.length() > TCConfig.maxEjectDistance) {
+                    vec.normalize().multiply(TCConfig.maxEjectDistance);
+                }
                 exitOffset = vec;
             }
         } else if (key.equals("exityaw")) {
@@ -523,6 +536,7 @@ public class CartProperties extends CartPropertiesStore implements IProperties {
         } else {
             return false;
         }
+        this.tryUpdate();
         return true;
     }
 

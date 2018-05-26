@@ -3,7 +3,6 @@ package com.bergerkiller.bukkit.tc.rails.logic;
 import org.bukkit.block.BlockFace;
 import org.bukkit.util.Vector;
 
-import com.bergerkiller.bukkit.common.bases.IntVector3;
 import com.bergerkiller.bukkit.common.utils.FaceUtil;
 import com.bergerkiller.bukkit.tc.controller.components.RailPath;
 
@@ -37,37 +36,27 @@ public class RailLogicVerticalSlopeUpsideDownB extends RailLogicVerticalSlopeBas
 
     @Override
     public RailPath getPath() {
-        if (this.railPath == RailPath.EMPTY) {
-            // Initialize the rail path, making use of getFixedPosition for each node
-            // This type of logic has a path consisting of two line segments
-            // One segment is vertical, and leads to somewhere in the middle
-            // The other segment is sloped from the middle to the other end
-            // The x/z coordinates are asserted from the y-coordinate
-            Vector p1 = new Vector(0.5, this.getYOffset() + 1.0, 0.5);
-            Vector p2 = new Vector(0.5, this.getYOffset() + this.getHalfOffset(), 0.5);
-            Vector p3 = new Vector(0.5, this.getYOffset() + this.getHalfOffset() - 0.5, 0.5);
+        // Initialize the rail path, making use of getFixedPosition for each node
+        // This type of logic has a path consisting of two line segments
+        // One segment is vertical, and leads to somewhere in the middle
+        // The other segment is sloped from the middle to the other end
+        // The x/z coordinates are asserted from the y-coordinate
+        double dx = 0.5 - RailLogicVertical.XZ_POS_OFFSET * this.getDirection().getModX();
+        double dz = 0.5 - RailLogicVertical.XZ_POS_OFFSET * this.getDirection().getModZ();
+        Vector p1 = new Vector(dx, 1.0, dz);
+        Vector p2 = new Vector(dx, Y_POS_OFFSET_UPSIDEDOWN_SLOPE, dz);
+        Vector p3 = new Vector(dx, Y_POS_OFFSET_UPSIDEDOWN + Y_POS_OFFSET_UPSIDEDOWN_SLOPE, dz);
 
-            if (this.alongZ) {
-                p3.setZ(0.5 - 0.5 * (double) this.getDirection().getModZ());
-            } else if (this.alongX) {
-                p3.setX(0.5 - 0.5 * (double) this.getDirection().getModX());
-            }
-
-            this.railPath = new RailPath.Builder()
-                    .add(p1, this.getDirection())
-                    .add(p2, this.getDirection())
-                    .add(p3, BlockFace.DOWN).build();
+        if (this.alongZ) {
+            p3.setZ(0.5 - 0.5 * (double) this.getDirection().getModZ());
+        } else if (this.alongX) {
+            p3.setX(0.5 - 0.5 * (double) this.getDirection().getModX());
         }
-        return this.railPath;
+
+        return new RailPath.Builder()
+                .add(p1, this.getDirection())
+                .add(p2, this.getDirection())
+                .add(p3, BlockFace.DOWN).build();
     }
 
-    @Override
-    public final boolean isVerticalHalf(double y, IntVector3 blockPos) {
-        return (y - 0.0001) > (blockPos.y + this.getHalfOffset());
-    }
-
-    @Override
-    protected double getHalfOffset() {
-        return -0.5 + Y_POS_OFFSET_UPSIDEDOWN + Y_POS_OFFSET_UPSIDEDOWN_SLOPE;
-    }
 }

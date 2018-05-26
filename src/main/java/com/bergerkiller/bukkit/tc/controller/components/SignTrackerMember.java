@@ -1,5 +1,6 @@
 package com.bergerkiller.bukkit.tc.controller.components;
 
+import com.bergerkiller.bukkit.tc.cache.RailSignCache.TrackedSign;
 import com.bergerkiller.bukkit.tc.controller.MinecartGroup;
 import com.bergerkiller.bukkit.tc.controller.MinecartMember;
 import com.bergerkiller.bukkit.tc.detector.DetectorRegion;
@@ -15,11 +16,11 @@ import java.util.List;
  * Keeps track of the active rails, signs and detector regions below a MinecartMember.
  * This tracker is routinely updated by the BlockTracker of the MinecartGroup.
  */
-public class BlockTrackerMember extends BlockTracker {
+public class SignTrackerMember extends SignTracker {
     private final MinecartMember<?> owner;
     protected List<TrackedSign> liveActiveSigns = new ArrayList<TrackedSign>();
 
-    public BlockTrackerMember(MinecartMember<?> owner) {
+    public SignTrackerMember(MinecartMember<?> owner) {
         this.owner = owner;
     }
 
@@ -51,7 +52,7 @@ public class BlockTrackerMember extends BlockTracker {
 
     @Override
     protected void onSignChange(TrackedSign sign, boolean active) {
-        SignActionEvent event = new SignActionEvent(sign.signBlock, sign.railsBlock, owner);
+        SignActionEvent event = new SignActionEvent(sign.signBlock, sign.railBlock, owner);
         event.setAction(active ? SignActionType.MEMBER_ENTER : SignActionType.MEMBER_LEAVE);
         SignAction.executeAll(event);
     }
@@ -63,7 +64,7 @@ public class BlockTrackerMember extends BlockTracker {
             MinecartGroup group = owner.getGroup();
             // Member owner could be dead and have no group
             if (group != null) {
-                group.getBlockTracker().update();
+                group.getSignTracker().update();
             }
         }
     }

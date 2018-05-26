@@ -1,10 +1,13 @@
 package com.bergerkiller.bukkit.tc.commands;
 
 import com.bergerkiller.bukkit.common.MessageBuilder;
+import com.bergerkiller.bukkit.common.Task;
 import com.bergerkiller.bukkit.common.internal.CommonPlugin;
 import com.bergerkiller.bukkit.common.map.MapDisplay;
+import com.bergerkiller.bukkit.common.math.Matrix4x4;
 import com.bergerkiller.bukkit.common.permissions.NoPermissionException;
 import com.bergerkiller.bukkit.common.utils.ItemUtil;
+import com.bergerkiller.bukkit.common.utils.MathUtil;
 import com.bergerkiller.bukkit.common.utils.StringUtil;
 import com.bergerkiller.bukkit.common.utils.WorldUtil;
 import com.bergerkiller.bukkit.tc.Localization;
@@ -14,9 +17,11 @@ import com.bergerkiller.bukkit.tc.TrainCarts;
 import com.bergerkiller.bukkit.tc.attachments.ui.AttachmentEditor;
 import com.bergerkiller.bukkit.tc.controller.MinecartGroup;
 import com.bergerkiller.bukkit.tc.controller.MinecartGroupStore;
+import com.bergerkiller.bukkit.tc.controller.MinecartMember;
 import com.bergerkiller.bukkit.tc.editor.TCMapControl;
 import com.bergerkiller.bukkit.tc.events.SignActionEvent;
 import com.bergerkiller.bukkit.tc.pathfinding.PathNode;
+import com.bergerkiller.bukkit.tc.properties.CartProperties;
 import com.bergerkiller.bukkit.tc.properties.CartPropertiesStore;
 import com.bergerkiller.bukkit.tc.properties.TrainProperties;
 import com.bergerkiller.bukkit.tc.statements.Statement;
@@ -26,12 +31,16 @@ import com.bergerkiller.bukkit.tc.tickets.TicketStore;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Effect;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Minecart;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.util.Vector;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
@@ -153,16 +162,14 @@ public class GlobalCommands {
                 builder.newLine().green("There are ").yellow(minecartCount).green(" minecart entities");
                 builder.send(sender);
                 // Show additional information about owned trains to players
-                if (sender instanceof Player) {
-                    StringBuilder statement = new StringBuilder();
-                    for (int i = 1; i < args.length; i++) {
-                        if (i > 1) {
-                            statement.append(' ');
-                        }
-                        statement.append(args[i]);
+                StringBuilder statement = new StringBuilder();
+                for (int i = 1; i < args.length; i++) {
+                    if (i > 1) {
+                        statement.append(' ');
                     }
-                    listTrains((Player) sender, statement.toString());
+                    statement.append(args[i]);
                 }
+                listTrains(sender, statement.toString());
             }
             return true;
         } else if (args[0].equals("edit")) {
@@ -185,7 +192,78 @@ public class GlobalCommands {
                     sender.sendMessage(ChatColor.RED + "Could not find a valid train named '" + name + "'!");
                 }
             } else {
-                sender.sendMessage(ChatColor.RED + "Please enter the exact name of the train to edit");
+                // Create an inverted camera transformation of the player's view direction
+                final Player player = (Player) sender;
+                World playerWorld = player.getWorld();
+                Matrix4x4 cameraTransform = new Matrix4x4();
+                cameraTransform.translateRotate(player.getEyeLocation());
+                cameraTransform.invert();
+
+                // Go by all minecarts on the server, and pick those close in view on the same world
+                // The transformed point is a projective view of the Minecart in the player's vision
+                // X/Y is left-right/up-down and Z is depth after the transformation is applied
+                MinecartMember<?> bestMember = null;
+                Vector bestPos = null;
+                double bestDistance = Double.MAX_VALUE;
+                for (MinecartGroup group : MinecartGroup.getGroups().cloneAsIterable()) {
+                    if (group.getWorld() != playerWorld) continue;
+                    for (MinecartMember<?> member : group) {
+                        Vector pos = member.getEntity().loc.vector();
+                        cameraTransform.transformPoint(pos);
+
+                        // Behind the player
+                        if (pos.getZ() < 0.0) {
+                            continue;
+                        }
+
+                        // Check if position is allowed
+                        double lim = Math.max(1.0, MathUtil.HALFROOTOFTWO * pos.getZ());
+                        if (Math.abs(pos.getX()) > lim || Math.abs(pos.getY()) > lim) {
+                            continue;
+                        }
+
+                        // Pick lowest distance
+                        double distance = Math.sqrt(pos.getX() * pos.getX() + pos.getY() * pos.getY()) / lim;
+                        if (bestPos == null || distance < bestDistance) {
+                            bestPos = pos;
+                            bestDistance = distance;
+                            bestMember = member;
+                        }
+                    }
+                }
+
+                if (bestMember != null && !bestMember.getProperties().hasOwnership(player)) {
+                    sender.sendMessage(ChatColor.RED + "You do not own this train and can not edit it!");
+                } else if (bestMember != null) {
+                    // Play a particle effect shooting upwards from the Minecart
+                    final Entity memberEntity = bestMember.getEntity().getEntity();
+                    new Task(TrainCarts.plugin) {
+                        final int batch_ctr = 5;
+                        double dy = 0.0;
+
+                        @Override
+                        public void run() {
+                            for (int i = 0; i < batch_ctr; i++) {
+                                if (dy > 50.0 || !player.isOnline() || memberEntity.isDead()) {
+                                    stop();
+                                    return;
+                                }
+                                Location loc = memberEntity.getLocation();
+                                loc.add(0.0, dy, 0.0);
+                                player.playEffect(loc, Effect.SMOKE, 4);
+                                dy += 1.0;
+                            }
+                        }
+                    }.start(1, 1);
+
+                    // Mark minecart as editing
+                    CartProperties.setEditing(player, bestMember.getProperties());
+                    sender.sendMessage(ChatColor.GREEN + "You are now editing train '" + bestMember.getGroup().getProperties().getTrainName() + "'!");
+                    return true;
+                } else {
+                    sender.sendMessage(ChatColor.RED + "You are not looking at any Minecart right now");
+                    sender.sendMessage(ChatColor.RED + "Please enter the exact name of the train to edit");
+                }
             }
             listTrains((Player) sender, "");
             return true;
@@ -278,7 +356,9 @@ public class GlobalCommands {
             return true;
         } else if (args[0].equals("attachments")) {
             Permission.COMMAND_GIVE_EDITOR.handle(sender);
-            ((Player) sender).getInventory().addItem(MapDisplay.createMapItem(AttachmentEditor.class));
+            ItemStack item = MapDisplay.createMapItem(AttachmentEditor.class);
+            ItemUtil.setDisplayName(item, "TrainCarts Attachments Editor");
+            ((Player) sender).getInventory().addItem(item);
             return true;
         } else if (args[0].equals("debug")) {
             Permission.DEBUG_COMMAND_DEBUG.handle(sender);
@@ -327,13 +407,17 @@ public class GlobalCommands {
         builder.send(sender);
     }
 
-    public static void listTrains(Player player, String statement) {
+    public static void listTrains(CommandSender sender, String statement) {
         MessageBuilder builder = new MessageBuilder();
-        builder.yellow("You are the proud owner of the following trains:");
+        if (sender instanceof Player) {
+            builder.yellow("You are the proud owner of the following trains:");
+        } else {
+            builder.yellow("The following trains exist on this server:");
+        }
         builder.newLine().setSeparator(ChatColor.WHITE, " / ");
         boolean found = false;
         for (TrainProperties prop : TrainProperties.getAll()) {
-            if (!prop.hasOwnership(player)) {
+            if (sender instanceof Player && !prop.hasOwnership((Player) sender)) {
                 continue;
             }
 
@@ -357,9 +441,9 @@ public class GlobalCommands {
             }
         }
         if (found) {
-            builder.send(player);
+            builder.send(sender);
         } else {
-            Localization.EDIT_NONEFOUND.message(player);
+            Localization.EDIT_NONEFOUND.message(sender);
         }
     }
 }

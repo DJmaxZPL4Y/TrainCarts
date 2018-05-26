@@ -1,26 +1,31 @@
 package com.bergerkiller.bukkit.tc.attachments.control;
 
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.Vector;
 
 import com.bergerkiller.bukkit.common.math.Matrix4x4;
-import com.bergerkiller.bukkit.common.math.Quaternion;
-import com.bergerkiller.bukkit.common.math.Vector3;
 import com.bergerkiller.bukkit.common.utils.DebugUtil;
 import com.bergerkiller.bukkit.common.utils.PacketUtil;
 import com.bergerkiller.bukkit.common.wrappers.DataWatcher;
+import com.bergerkiller.bukkit.common.math.Quaternion;
+import com.bergerkiller.bukkit.tc.Util;
 import com.bergerkiller.bukkit.tc.attachments.VirtualEntity;
+import com.bergerkiller.bukkit.tc.attachments.VirtualEntity.SyncMode;
 import com.bergerkiller.bukkit.tc.attachments.config.ItemTransformType;
 import com.bergerkiller.generated.net.minecraft.server.EntityArmorStandHandle;
 import com.bergerkiller.generated.net.minecraft.server.EntityHandle;
+import com.bergerkiller.generated.net.minecraft.server.EntityTrackerEntryHandle;
 import com.bergerkiller.generated.net.minecraft.server.PacketPlayOutEntityEquipmentHandle;
 
 public class CartAttachmentItem extends CartAttachment {
     private VirtualEntity entity;
     private ItemStack item;
     private ItemTransformType transformType;
+    private double last_yaw = 0.0;
 
     @Override
     public void onAttached() {
@@ -36,22 +41,11 @@ public class CartAttachmentItem extends CartAttachment {
 
         this.entity = new VirtualEntity(this.controller);
         this.entity.setEntityType(EntityType.ARMOR_STAND);
-        this.entity.setHasRotation(true);
-        this.entity.setRelativeOffset(0.0, -1.2, 0.0);
-        this.entity.getMetaData().set(EntityHandle.DATA_FLAGS, (byte) EntityHandle.DATA_FLAG_INVISIBLE);
+        this.entity.setSyncMode(SyncMode.ITEM);
 
-        Vector3 poseTransform = new Vector3(0.0, 0.0, 0.0);
-        if (this.transformType == ItemTransformType.LEFT_HAND) {
-            poseTransform.x = -0.4;
-            poseTransform.y = 0.3;
-            poseTransform.z = 0.9375;
-        } else if (this.transformType == ItemTransformType.RIGHT_HAND) {
-            poseTransform.x = -0.4;
-            poseTransform.y = 0.3;
-            poseTransform.z = -0.9375;
-        }
+        this.entity.getMetaData().set(EntityHandle.DATA_FLAGS, (byte) EntityHandle.DATA_FLAG_INVISIBLE);
         this.local_transform = new Matrix4x4();
-        this.local_transform.translate(Vector3.add(this.position, poseTransform));
+        this.local_transform.translate(this.position);
         this.local_transform.rotateYawPitchRoll(this.rotation);
     }
 
@@ -90,28 +84,79 @@ public class CartAttachmentItem extends CartAttachment {
     @Override
     public void onPositionUpdate() {
         super.onPositionUpdate();
-        this.entity.updatePosition(this.transform);
 
-        // Convert the pitch/roll into an appropriate pose
-        Vector in_ypr = this.entity.getYawPitchRoll();
+        final boolean DEBUG_POSE = false;
 
-        Vector rotation;
-        if (this.transformType == ItemTransformType.LEFT_HAND) {
-            rotation = new Vector(180.0, -90.0 + in_ypr.getZ(), 90.0 - in_ypr.getX());
-        } else if (this.transformType == ItemTransformType.RIGHT_HAND) {
-            rotation = new Vector(0.0, 90.0 + in_ypr.getZ(), 90.0 - in_ypr.getX());
+        // Debug mode makes models look at the viewer to test orientation
+        Quaternion q_rotation;
+        if (DEBUG_POSE) {
+            Vector dir = new Vector(0, 0, 1);
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                dir = p.getEyeLocation().toVector().subtract(this.transform.toVector());
+                break;
+            }
+            dir = new Vector(1, 0, 0);
+            q_rotation = Quaternion.fromLookDirection(dir, new Vector(0,1,0)); //entity_transform.getRotation();
+            q_rotation = Quaternion.multiply(Quaternion.fromAxisAngles(dir, DebugUtil.getDoubleValue("roll", 0.0)), q_rotation);
         } else {
-            rotation = new Vector(90.0, 90.0 + in_ypr.getZ(), 90.0 - in_ypr.getX());
+            q_rotation = this.transform.getRotation();
         }
 
+        // Detect changes in yaw that we can apply to the entity directly
+        // The remainder or 'error' is applied to the pose of the model
+        Vector new_rotation = q_rotation.getYawPitchRoll();
+        double new_yaw = new_rotation.getY();
+        double yaw_change = new_yaw - last_yaw;
+        while (yaw_change > 180.0) yaw_change -= 360.0;
+        while (yaw_change < -180.0) yaw_change += 360.0;
+        last_yaw = new_yaw;
+        Vector new_entity_ypr = this.entity.getYawPitchRoll().clone();
+        if (yaw_change >= -90.0 && yaw_change <= 90.0) {
+            new_entity_ypr.setY(new_entity_ypr.getY() + yaw_change);
+        }
+
+        // Subtract rotation of Entity (keep protocol error into account)
+        int prot_yaw_rot = EntityTrackerEntryHandle.getProtocolRotation((float) new_entity_ypr.getY());
+        double entity_yaw = EntityTrackerEntryHandle.getRotationFromProtocol(prot_yaw_rot);
+        Quaternion q = new Quaternion();
+        q.rotateY(entity_yaw);
+        q_rotation = Quaternion.multiply(q, q_rotation);
+
+        // Adjust relative offset of the armorstand entity to take shoulder angle into account
+        // This doesn't apply for head, and only matters for the left/right hand
+        // This ensures any further positioning is relative to the base of the shoulder controlled
+        final double SHOULDER_WIDTH = 0.3125;
+        final double SHOULDER_HEIGHT = 1.38;
+        final double NECK_HEIGHT = 1.44;
+        if (this.transformType == ItemTransformType.LEFT_HAND) {
+            this.entity.setRelativeOffset(
+                    -SHOULDER_WIDTH * Math.cos(Math.toRadians(entity_yaw)),
+                    -SHOULDER_HEIGHT,
+                    -SHOULDER_WIDTH * Math.sin(Math.toRadians(entity_yaw)));
+
+        } else if (this.transformType == ItemTransformType.RIGHT_HAND) {
+            this.entity.setRelativeOffset(
+                    SHOULDER_WIDTH * Math.cos(Math.toRadians(entity_yaw)),
+                    -SHOULDER_HEIGHT,
+                    SHOULDER_WIDTH * Math.sin(Math.toRadians(entity_yaw)));
+
+        } else {
+            this.entity.setRelativeOffset(0.0, -NECK_HEIGHT, 0.0);
+        }
+
+        // Apply the transform to the entity position and pose of the model
+        this.entity.updatePosition(this.transform, new_entity_ypr);
+        Vector rotation = Util.getArmorStandPose(q_rotation);
         DataWatcher meta = this.entity.getMetaData();
         if (this.transformType == ItemTransformType.HEAD) {
             meta.set(EntityArmorStandHandle.DATA_POSE_HEAD, rotation);
         } else if (this.transformType == ItemTransformType.CHEST) {
             meta.set(EntityArmorStandHandle.DATA_POSE_BODY, rotation);
         } else if (this.transformType == ItemTransformType.LEFT_HAND) {
+            rotation.setX(rotation.getX() - 90.0);
             meta.set(EntityArmorStandHandle.DATA_POSE_ARM_LEFT, rotation);
         } else if (this.transformType == ItemTransformType.RIGHT_HAND) {
+            rotation.setX(rotation.getX() - 90.0);
             meta.set(EntityArmorStandHandle.DATA_POSE_ARM_RIGHT, rotation);
         } else if (this.transformType == ItemTransformType.LEGS || this.transformType == ItemTransformType.FEET) {
             meta.set(EntityArmorStandHandle.DATA_POSE_LEG_LEFT, rotation);

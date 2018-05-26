@@ -1,15 +1,11 @@
 package com.bergerkiller.bukkit.tc.controller;
 
 import com.bergerkiller.bukkit.common.collections.ImplicitlySharedSet;
-import com.bergerkiller.bukkit.tc.TCConfig;
 import com.bergerkiller.bukkit.tc.TrainCarts;
 import com.bergerkiller.bukkit.tc.events.GroupCreateEvent;
 import com.bergerkiller.bukkit.tc.events.GroupLinkEvent;
 import com.bergerkiller.bukkit.tc.properties.TrainProperties;
-import com.bergerkiller.bukkit.tc.utils.TrackWalkIterator;
 import org.bukkit.Location;
-import org.bukkit.block.Block;
-import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 
@@ -79,8 +75,8 @@ public class MinecartGroupStore extends ArrayList<MinecartMember<?>> {
             g.setProperties(TrainProperties.get(name));
         }
         for (MinecartMember<?> member : members) {
-            if (member != null && !member.getEntity().isDead()) {
-                member.unloaded = false;
+            if (member != null && member.getEntity() != null && !member.getEntity().isDead()) {
+                member.setUnloaded(false);
                 g.add(member);
             }
         }
@@ -88,6 +84,7 @@ public class MinecartGroupStore extends ArrayList<MinecartMember<?>> {
         g.getAverageForce();
         groups.add(g);
         GroupCreateEvent.call(g);
+        g.onPropertiesChanged();
         return g;
     }
 
@@ -99,24 +96,7 @@ public class MinecartGroupStore extends ArrayList<MinecartMember<?>> {
         }
         groups.add(g);
         GroupCreateEvent.call(g);
-        return g;
-    }
-
-    @Deprecated
-    public static MinecartGroup spawn(Block startblock, BlockFace direction, EntityType... types) {
-        return spawn(startblock, direction, Arrays.asList(types));
-    }
-
-    @Deprecated
-    public static MinecartGroup spawn(Block startblock, BlockFace direction, List<EntityType> types) {
-        Location[] destinations = TrackWalkIterator.walk(startblock, direction, types.size(), TCConfig.cartDistanceGap + 1.0);
-        if (types.size() != destinations.length || destinations.length == 0) return null;
-        MinecartGroup g = new MinecartGroup();
-        for (int i = 0; i < destinations.length; i++) {
-            g.add(MinecartMemberStore.spawn(destinations[destinations.length - i - 1], types.get(i)));
-        }
-        groups.add(g);
-        GroupCreateEvent.call(g);
+        g.onPropertiesChanged();
         return g;
     }
 
@@ -158,7 +138,7 @@ public class MinecartGroupStore extends ArrayList<MinecartMember<?>> {
 
     public static MinecartGroup get(TrainProperties prop) {
         for (MinecartGroup group : groups) {
-            if (group.getProperties() == prop) return group;
+            if (group.isPropertiesEqual(prop)) return group;
         }
         return null;
     }
@@ -211,8 +191,8 @@ public class MinecartGroupStore extends ArrayList<MinecartMember<?>> {
             }
 
             //Clear targets and active signs
-            g1.getBlockTracker().clear();
-            g2.getBlockTracker().clear();
+            g1.getSignTracker().clear();
+            g2.getSignTracker().clear();
 
             //Finally link
             if (m1index == 0 && m2index == 0) {
@@ -229,7 +209,7 @@ public class MinecartGroupStore extends ArrayList<MinecartMember<?>> {
             //Correct the yaw and order
             g2.getAverageForce();
             g2.updateDirection();
-            g2.getBlockTracker().updatePosition();
+            g2.getSignTracker().updatePosition();
 
             g1.remove();
             m2.playLinkEffect();

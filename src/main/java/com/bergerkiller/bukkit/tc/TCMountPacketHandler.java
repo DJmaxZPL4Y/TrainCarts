@@ -15,6 +15,9 @@ import com.bergerkiller.bukkit.common.protocol.PacketType;
 import com.bergerkiller.bukkit.common.utils.CommonUtil;
 import com.bergerkiller.bukkit.common.utils.PacketUtil;
 import com.bergerkiller.bukkit.common.wrappers.IntHashMap;
+import com.bergerkiller.bukkit.tc.attachments.control.CartAttachmentSeat;
+import com.bergerkiller.bukkit.tc.attachments.control.PassengerController;
+import com.bergerkiller.bukkit.tc.controller.MinecartMemberNetwork;
 import com.bergerkiller.generated.net.minecraft.server.PacketPlayOutAttachEntityHandle;
 import com.bergerkiller.generated.net.minecraft.server.PacketPlayOutMountHandle;
 
@@ -93,6 +96,20 @@ public class TCMountPacketHandler implements PacketMonitor {
                     meta.spawned = false;
                     if (meta.pendingTasks == null || meta.pendingTasks.isEmpty()) {
                         _map.remove(id);
+                    }
+                }
+            }
+
+            // If the entity is a passenger of a seat attachment, resend all mount packets associated with it later
+            for (int id : ids) {
+                CartAttachmentSeat seat = TrainCarts.plugin.getSeatAttachmentMap().get(id);
+                if (seat != null) {
+                    MinecartMemberNetwork controller = seat.getController();
+                    if (controller != null) {
+                        PassengerController pc = controller.getPassengerController(this._player, false);
+                        if (pc != null) {
+                            pc.resend(id);
+                        }
                     }
                 }
             }
@@ -206,6 +223,16 @@ public class TCMountPacketHandler implements PacketMonitor {
             }
             PacketUtil.sendPacket(handler.getPlayer(), PacketPlayOutMountHandle.createNew(vehicleId, passengerIds));
         }
+
+        @Override
+        public String toString() {
+            String s = "MOUNT[veh=" + vehicleId + ",pass=[";
+            for (int i = 0; i < this.passengerIds.length; i++) {
+                if (i > 0) s += ", ";
+                s += this.passengerIds[i];
+            }
+            return s + "]";
+        }
     }
 
     private static class PendingAttach implements PendingTask {
@@ -229,6 +256,11 @@ public class TCMountPacketHandler implements PacketMonitor {
             attach.setVehicleId(this.vehicleId);
             attach.setPassengerId(this.passengerId);
             PacketUtil.sendPacket(handler.getPlayer(), attach);
+        }
+
+        @Override
+        public String toString() {
+            return "ATTACH[veh=" + vehicleId + ", pass=" + passengerId + "]";
         }
     }
 }

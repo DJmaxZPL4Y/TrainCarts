@@ -14,6 +14,7 @@ import com.bergerkiller.bukkit.common.StringReplaceBundle;
 import com.bergerkiller.bukkit.common.config.ConfigurationNode;
 import com.bergerkiller.bukkit.common.config.FileConfiguration;
 import com.bergerkiller.bukkit.common.inventory.ItemParser;
+import com.bergerkiller.bukkit.common.map.MapResourcePack;
 import com.bergerkiller.bukkit.common.utils.LogicUtil;
 import com.bergerkiller.bukkit.common.utils.MaterialUtil;
 import com.bergerkiller.bukkit.common.utils.MathUtil;
@@ -29,9 +30,9 @@ public class TCConfig {
 
     // Some updates break things people did in the past
     // This allows people to restore older logic
-    public static boolean legacyVerticalGravity;
     public static boolean legacySpeedLimiting;
 
+    public static boolean destroyAllOnShutdown;
     public static double maxVelocity;
     public static double maxEjectDistance;
     public static double cartDistanceGapMax;
@@ -85,6 +86,7 @@ public class TCConfig {
     public static Set<Material> allowedBlockBreakTypes = new HashSet<>();
     public static Set<String> disabledWorlds = new HashSet<>();
     public static Map<String, ItemParser[]> parsers = new HashMap<>();
+    public static MapResourcePack resourcePack = MapResourcePack.SERVER;
 
     public static void load(FileConfiguration config) {
         config.setHeader("This is the configuration file of TrainCarts");
@@ -92,6 +94,12 @@ public class TCConfig {
         config.addHeader("For more information, you can visit the following websites:");
         config.addHeader("http://www.minecraftwiki.net/wiki/Bukkit/TrainCarts");
         config.addHeader("http://forums.bukkit.org/threads/traincarts.29491/");
+
+        config.setHeader("resourcePack", "\nPath or online download URL to the resource pack to use");
+        config.addHeader("resourcePack", "Using 'server' makes it use server.properties (default)");
+        config.addHeader("resourcePack", "Using 'default' or empty makes it use no resource pack at all");
+        resourcePack = new MapResourcePack(config.get("resourcePack", "server"));
+        resourcePack.load();
 
         config.setHeader("normal", "\nSettings for normally-aligned (straight) carts");
         config.setHeader("normal.cartDistanceGap", "The distance between two carts in a train");
@@ -132,6 +140,8 @@ public class TCConfig {
         config.setHeader("launchForce", "\nThe amount of velocity stations give when launching trains");
         launchForce = config.get("launchForce", 10.0);
 
+        config.setHeader("destroyAllOnShutdown", "\nDestroys all existing minecarts on startup and shutdown of the plugin");
+        destroyAllOnShutdown = config.get("destroyAllOnShutdown", false);
 
         // Deprecation backwards compatibility
         if (config.contains("pushAway")) {
@@ -219,11 +229,6 @@ public class TCConfig {
         config.setHeader("allowUpsideDownRails", "\nWhether upside-down rail functionality is enabled on the server");
         config.addHeader("allowUpsideDownRails", "When disabled, minecarts can not be rotated upside-down");
         allowUpsideDownRails = config.get("allowUpsideDownRails", true);
-
-        config.setHeader("legacyVerticalGravity", "\nBefore TrainCarts v1.12.1-v2 vertical rail gravity was kind of awful");
-        config.addHeader("legacyVerticalGravity", "It took a lot more speed to get up a vertical rail compared to sloped rails");
-        config.addHeader("legacyVerticalGravity", "This was fixed. If you depend on this legacy behavior, change this option to True");
-        legacyVerticalGravity = config.get("legacyVerticalGravity", false);
 
         config.setHeader("legacySpeedLimiting", "\nBefore TrainCarts v1.12.2-v1 speed limiting was done on each individual axis");
         config.addHeader("legacySpeedLimiting", "This had a big impact on air physics, because it never made a good ellipse fall");

@@ -16,6 +16,7 @@ import com.bergerkiller.bukkit.common.wrappers.HumanHand;
 import com.bergerkiller.bukkit.tc.attachments.ProfileNameModifier;
 import com.bergerkiller.bukkit.tc.attachments.old.FakePlayer;
 import com.bergerkiller.bukkit.tc.attachments.ui.AttachmentEditor;
+import com.bergerkiller.bukkit.tc.cache.RailSignCache;
 import com.bergerkiller.bukkit.tc.controller.MinecartGroup;
 import com.bergerkiller.bukkit.tc.controller.MinecartMember;
 import com.bergerkiller.bukkit.tc.controller.MinecartMemberStore;
@@ -409,10 +410,6 @@ public class TCListener implements Listener {
             if (clickedBlock == null) {
                 // Use ray tracing to obtain the correct block
                 clickedBlock = CommonEntity.get(event.getPlayer()).getTargetBlock();
-                if (clickedBlock == null) {
-                    // No interaction occurred
-                    return;
-                }
             }
 
             // Debug tools
@@ -424,6 +421,11 @@ public class TCListener implements Listener {
                         DebugTool.onDebugInteract(event.getPlayer(), clickedBlock, event.getItem(), debugType);
                     }
                 }
+            }
+
+            // No interaction occurred
+            if (clickedBlock == null) {
+                return;
             }
 
             //System.out.println("Interacted with block [" + clickedBlock.getX() + ", " + clickedBlock.getY() + ", " + clickedBlock.getZ() + "]");
@@ -779,6 +781,10 @@ public class TCListener implements Listener {
             return;
         }
 
+        // Reset cache to make sure all signs are recomputed later, after the sign was made
+        // Doing it here, in the most generic case, so that custom addon signs are also refreshed
+        RailSignCache.reset();
+
         SignAction.handleBuild(event);
         if (event.isCancelled()) {
             // Properly give the sign back to the player that placed it
@@ -854,7 +860,7 @@ public class TCListener implements Listener {
     public void onRailsBreak(Block railsBlock) {
         MinecartMember<?> mm = MinecartMemberStore.getAt(railsBlock);
         if (mm != null) {
-            mm.getGroup().getBlockTracker().updatePosition();
+            mm.getGroup().getSignTracker().updatePosition();
         }
         // Remove path node from path finding
         PathNode.remove(railsBlock);

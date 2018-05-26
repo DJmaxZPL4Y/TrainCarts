@@ -1,14 +1,17 @@
 package com.bergerkiller.bukkit.tc.rails.logic;
 
-import com.bergerkiller.bukkit.common.bases.IntVector3;
 import com.bergerkiller.bukkit.common.entity.CommonEntity;
+import com.bergerkiller.bukkit.common.entity.type.CommonMinecart;
 import com.bergerkiller.bukkit.common.math.Quaternion;
 import com.bergerkiller.bukkit.common.utils.FaceUtil;
 import com.bergerkiller.bukkit.common.utils.MathUtil;
 import com.bergerkiller.bukkit.tc.TCConfig;
+import com.bergerkiller.bukkit.tc.Util;
 import com.bergerkiller.bukkit.tc.controller.MinecartMember;
 import com.bergerkiller.bukkit.tc.controller.components.RailPath;
+import com.bergerkiller.bukkit.tc.controller.components.RailState;
 
+import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.util.Vector;
 
@@ -18,7 +21,7 @@ import org.bukkit.util.Vector;
 public abstract class RailLogic {
     protected final boolean alongZ, alongX, alongY, curved;
     private final BlockFace horizontalDir;
-    protected RailPath railPath;
+    private RailPath railPath;
 
     public RailLogic(BlockFace horizontalDirection) {
         this.horizontalDir = horizontalDirection;
@@ -26,7 +29,7 @@ public abstract class RailLogic {
         this.alongZ = FaceUtil.isAlongZ(horizontalDirection);
         this.alongY = FaceUtil.isAlongY(horizontalDirection);
         this.curved = !alongZ && !alongY && !alongX;
-        this.railPath = RailPath.EMPTY;
+        this.railPath = null;
     }
 
     /**
@@ -67,12 +70,13 @@ public abstract class RailLogic {
     }
 
     /**
-     * Gets the vertical motion factor caused by gravity
+     * Gets the vertical motion factor caused by gravity.
+     * When gravity should be disabled for particular rail logic, it should be done here.
      *
      * @return gravity multiplier
      */
     public double getGravityMultiplier(MinecartMember<?> member) {
-        return this.hasVerticalMovement() ? MinecartMember.GRAVITY_MULTIPLIER : 0.0;
+        return MinecartMember.GRAVITY_MULTIPLIER_RAILED;
     }
 
     @Override
@@ -107,6 +111,16 @@ public abstract class RailLogic {
      * @return Forwards velocity of the minecart
      */
     public double getForwardVelocity(MinecartMember<?> member) {
+        // Find segment of path we are at, and use motDot to get the velocity along it
+        RailPath.Segment segment = this.getPath().findSegment(member.getEntity().loc.vector(), member.getBlock());
+        if (segment != null) {
+            RailPath.Position pos = new RailPath.Position();
+            pos.setMotion(member.getDirection());
+            segment.calcDirection(pos);
+            return pos.motDot(member.getEntity().vel.vector());
+        }
+
+        // Fallback
         final CommonEntity<?> e = member.getEntity();
         final BlockFace direction = member.getDirection();
         double vel = 0.0;
@@ -123,14 +137,26 @@ public abstract class RailLogic {
      * @param force  to set to, negative to reverse
      */
     public void setForwardVelocity(MinecartMember<?> member, double force) {
+        // Find segment of path we are at, and set a forward velocity along this segment
+        RailPath.Segment segment = this.getPath().findSegment(member.getEntity().loc.vector(), member.getBlock());
+        if (segment != null) {
+            RailPath.Position pos = new RailPath.Position();
+            pos.setMotion(member.getRailTracker().getMotionVector());
+            segment.calcDirection(pos);
+            member.getEntity().vel.set(pos.motX * force, pos.motY * force, pos.motZ * force);
+            return;
+        }
+
+        // Fallback
         final CommonEntity<?> e = member.getEntity();
         if (force == 0.0) {
             e.vel.setZero();
         } else if (!this.hasVerticalMovement() || !member.isMovingVerticalOnly()) {
             e.vel.setX(force * FaceUtil.cos(member.getDirection()));
+            e.vel.setY(0.0);
             e.vel.setZ(force * FaceUtil.sin(member.getDirection()));
         } else {
-            e.vel.setY(force * member.getDirection().getModY());
+            e.vel.set(0.0, force * member.getDirection().getModY(), 0.0);
         }
     }
 
@@ -143,7 +169,33 @@ public abstract class RailLogic {
      * @return the BlockFace direction
      */
     @Deprecated
-    public abstract BlockFace getMovementDirection(BlockFace endDirection);
+    public BlockFace getMovementDirection(BlockFace endDirection) {
+        return endDirection;
+    }
+
+    public BlockFace getMovementDirection(Block railsBlock, Block positionBlock, BlockFace endDirection) {
+        RailPath path = this.getPath();
+        if (path.isEmpty()) {
+            return endDirection;
+        }
+        RailPath.Position position = new RailPath.Position();
+        position.setLocationMidOf(positionBlock);
+        position.posX -= 0.5 * endDirection.getModX();
+        position.posY -= 0.5 * endDirection.getModY();
+        position.posZ -= 0.5 * endDirection.getModZ();
+        position.setMotion(endDirection);
+        path.snap(position, railsBlock);
+        return Util.vecToFace(position.motX, position.motY, position.motZ, true);
+    }
+
+    /**
+     * Callback which allows Rail Logic to alter the movement direction or general positioning
+     * of the rail state during path tracking.
+     * 
+     * @param state
+     */
+    public void onPathAdjust(RailState state) {
+    }
 
     /**
      * Obtains a path consisting of connected points along which Minecarts move using this rail logic.
@@ -153,17 +205,23 @@ public abstract class RailLogic {
      * @return rails path
      */
     public RailPath getPath() {
+        if (this.railPath == null) {
+            this.railPath = this.createPath();
+        }
         return this.railPath;
     }
 
     /**
-     * Gets the position of the Minecart when snapped to the rails. The input
-     * position vector is adjusted, with the result written into the same vector.
+     * This method is called once the first time {@link #getPath()} is invoked to generate
+     * the appropriate rail path to use. To set the path to use for this rail logic,
+     * override this method. If the path changes for the duration the rail logic is in use,
+     * it is better to override and handle {@link #getPath()} instead.
      * 
-     * @param position input and result output
-     * @param railPos of the rails using this logic
+     * @return path to use
      */
-    public abstract void getFixedPosition(Vector position, IntVector3 railPos);
+    protected RailPath createPath() {
+        return RailPath.EMPTY;
+    }
 
     /**
      * Is called right after all physics updates have completed, and the final orientation of the Minecart
@@ -189,7 +247,21 @@ public abstract class RailLogic {
      *
      * @param member to update
      */
-    public abstract void onPreMove(MinecartMember<?> member);
+    public void onPreMove(MinecartMember<?> member) {
+        member.snapToPath(getPath());
+        
+        // Adjust the velocity vector to be oriented along the rail path slope
+        //System.out.println("VEL: " + member.getEntity().vel + "    DIR " + member.getDirection());
+        if (!this.getPath().isEmpty()) {
+            CommonMinecart<?> entity = member.getEntity();
+            double vel = entity.vel.length();
+            RailPath.Position pos = new RailPath.Position();
+            pos.setLocation(entity.loc);
+            pos.setMotion(member.getDirection());
+            this.getPath().move(pos, member.getBlock(), 0.0);
+            entity.vel.set(vel * pos.motX, vel * pos.motY, vel * pos.motZ);
+        }
+    }
 
     /**
      * Is called after the minecart performed the movement updates<br>
@@ -200,6 +272,7 @@ public abstract class RailLogic {
      * @param member that moved
      */
     public void onPostMove(MinecartMember<?> member) {
-        
+        member.snapToPath(getPath());
     }
+
 }

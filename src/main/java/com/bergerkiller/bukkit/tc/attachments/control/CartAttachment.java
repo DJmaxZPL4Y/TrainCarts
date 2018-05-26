@@ -8,13 +8,14 @@ import org.bukkit.util.Vector;
 
 import com.bergerkiller.bukkit.common.config.ConfigurationNode;
 import com.bergerkiller.bukkit.common.math.Matrix4x4;
-import com.bergerkiller.bukkit.common.math.Quaternion;
 import com.bergerkiller.bukkit.common.math.Vector3;
 import com.bergerkiller.bukkit.tc.attachments.config.CartAttachmentType;
+import com.bergerkiller.bukkit.tc.attachments.config.PositionAnchorType;
 import com.bergerkiller.bukkit.tc.controller.MinecartMemberNetwork;
 
 public abstract class CartAttachment {
     public List<CartAttachment> children = new ArrayList<CartAttachment>(0);
+    private PositionAnchorType anchor = PositionAnchorType.DEFAULT;
     protected MinecartMemberNetwork controller = null;
     protected CartAttachment parent = null;
     protected ConfigurationNode config = null;
@@ -25,6 +26,7 @@ public abstract class CartAttachment {
     public Vector3 rotation;
 
     public void onAttached() {
+        this.anchor = PositionAnchorType.DEFAULT;
         this.position = new Vector3(0.0, 0.0, 0.0);
         this.rotation = new Vector3(0.0, 0.0, 0.0);
         if (this.config.isNode("position")) {
@@ -35,6 +37,7 @@ public abstract class CartAttachment {
             this.rotation.x = positionNode.get("rotX", 0.0);
             this.rotation.y = positionNode.get("rotY", 0.0);
             this.rotation.z = positionNode.get("rotZ", 0.0);
+            this.anchor = positionNode.get("anchor", PositionAnchorType.DEFAULT);
         }
         this.local_transform = new Matrix4x4();
         this.local_transform.translate(this.position);
@@ -42,6 +45,17 @@ public abstract class CartAttachment {
     }
 
     public void onDetached() {
+        this.last_transform = null;
+        this.transform = null;
+    }
+
+    /**
+     * Gets the network controller that owns and manages this attachment
+     * 
+     * @return controller
+     */
+    public MinecartMemberNetwork getController() {
+        return this.controller;
     }
 
     /**
@@ -111,7 +125,20 @@ public abstract class CartAttachment {
 
     public static void updatePositions(CartAttachment attachment, Matrix4x4 transform) {
         attachment.last_transform = attachment.transform;
-        attachment.transform = transform.clone();
+
+        // Update the transform based on the anchor setting
+        switch (attachment.anchor) {
+        case FRONT_WHEEL:
+            attachment.transform = attachment.getController().getMember().getWheels().front().getAbsoluteTransform();
+            break;
+        case BACK_WHEEL:
+            attachment.transform = attachment.getController().getMember().getWheels().back().getAbsoluteTransform();
+            break;
+        default:
+            attachment.transform = transform.clone();
+            break;
+        }
+
         attachment.onPositionUpdate();
         if (attachment.last_transform == null) {
             attachment.last_transform = attachment.transform.clone();

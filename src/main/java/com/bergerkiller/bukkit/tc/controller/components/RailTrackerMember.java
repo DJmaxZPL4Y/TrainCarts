@@ -3,11 +3,13 @@ package com.bergerkiller.bukkit.tc.controller.components;
 import com.bergerkiller.bukkit.common.bases.IntVector3;
 import com.bergerkiller.bukkit.tc.controller.MinecartMember;
 import com.bergerkiller.bukkit.tc.rails.logic.RailLogic;
+import com.bergerkiller.bukkit.tc.rails.logic.RailLogicAir;
 import com.bergerkiller.bukkit.tc.rails.logic.RailLogicGround;
 import com.bergerkiller.bukkit.tc.rails.type.RailType;
 import com.bergerkiller.bukkit.tc.utils.TrackIterator;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.util.Vector;
 
 /**
  * Stores rail information of a Minecart Member
@@ -20,7 +22,7 @@ public class RailTrackerMember extends RailTracker {
 
     public RailTrackerMember(MinecartMember<?> owner) {
         this.owner = owner;
-        this.lastRail = this.rail = new TrackedRail(owner, null, null, RailType.NONE, false, BlockFace.SELF);
+        this.lastRail = this.rail = new TrackedRail(owner, null, null, null, RailType.NONE, false, new Vector(0,-1,0), BlockFace.SELF);
         this.lastRailLogic = this.railLogic = RailLogicGround.INSTANCE;
     }
 
@@ -36,6 +38,17 @@ public class RailTrackerMember extends RailTracker {
     @Override
     public boolean isOnRails(Block railsBlock) {
         return owner.getGroup().getRailTracker().getMemberFromRails(railsBlock) == owner;
+    }
+
+    /**
+     * Gets the rail the Minecart is on. This includes information such as from
+     * what direction the minecart got onto the rail and what position on the rail
+     * the minecart is moving.
+     * 
+     * @return current rail
+     */
+    public TrackedRail getRail() {
+        return this.rail;
     }
 
     /**
@@ -59,10 +72,14 @@ public class RailTrackerMember extends RailTracker {
         return this.rail.disconnected;
     }
 
+    public Vector getMotionVector() {
+        return this.rail.state.motionVector();
+    }
+
     public BlockFace getRailDirection() {
         return this.rail.enterFace;
     }
-    
+
     /**
      * Gets the rail type of the current tick
      *
@@ -88,6 +105,20 @@ public class RailTrackerMember extends RailTracker {
      */
     public Block getBlock() {
         return this.rail.block;
+    }
+
+    public Block getMinecartPos() {
+        return this.rail.minecartBlock;
+    }
+
+    /**
+     * Gets rail state information of this Minecart.
+     * This includes rail type, rail block, position and motion vector on the rails.
+     * 
+     * @return rail state
+     */
+    public RailState getState() {
+        return this.rail.state;
     }
 
     /**
@@ -117,7 +148,18 @@ public class RailTrackerMember extends RailTracker {
         if (this.railLogicSnapshotted && this.railLogic != null) {
             return this.railLogic;
         } else {
-            return this.rail.type.getLogic(this.owner, this.rail.block, this.rail.enterFace);
+            try {
+                return this.rail.state.loadRailLogic();
+            } catch (Throwable t) {
+                RailType.handleCriticalError(this.rail.type, t);
+
+                // Change rail type to rail type none, returning AIR logic as a fallback
+                RailState state = this.rail.state.clone();
+                state.setRailType(RailType.NONE);
+                state.setRailBlock(state.positionBlock());
+                this.rail = new TrackedRail(this.rail.member, state, this.rail.disconnected);
+                return RailLogicAir.INSTANCE;
+            }
         }
     }
 
@@ -155,7 +197,8 @@ public class RailTrackerMember extends RailTracker {
      * Creates a snapshot of the Rail Logic for the entire next run
      */
     public void snapshotRailLogic() {
-        this.railLogic = this.rail.type.getLogic(this.owner, this.rail.block, this.rail.enterFace);
+        this.railLogicSnapshotted = false;
+        this.railLogic = this.getRailLogic();
         this.railLogicSnapshotted = true;
     }
 

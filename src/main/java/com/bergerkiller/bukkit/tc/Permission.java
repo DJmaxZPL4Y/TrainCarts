@@ -44,6 +44,8 @@ public class Permission extends PermissionEnum {
     public static final Permission COMMAND_ISSUE = new Permission("train.command.issue", PermissionDefault.TRUE, "Whether the player can report problems with TrainCarts");
     public static final Permission COMMAND_GIVE_EDITOR = new Permission("train.command.editor", PermissionDefault.OP, "Whether the player can use commands to give himself editors for trains (models) and signs");
     public static final Permission COMMAND_SAVE_TRAIN = new Permission("tran.command.save", PermissionDefault.OP, "Whether the player can use a command to save a train under a name");
+    public static final Permission COMMAND_ENTER = new Permission("tran.command.enter", PermissionDefault.OP, "Whether the player can use a command to enter the train/cart being edited");
+    public static final Permission COMMAND_LAUNCH = new Permission("tran.command.launch", PermissionDefault.OP, "Whether the player can use a command to launch the train being edited");
     public static final Permission BUILD_STATION = new Permission("train.build.station", PermissionDefault.OP, "The player can build train stations");
     public static final Permission BUILD_SPAWNER = new Permission("train.build.spawner", PermissionDefault.OP, "The player can build train spawners");
     public static final Permission SPAWNER_AUTOMATIC = new Permission("train.spawner.automatic", PermissionDefault.TRUE, "The player can build spawners which automatically create carts");
@@ -60,6 +62,7 @@ public class Permission extends PermissionEnum {
     public static final Permission BUILD_DESTRUCTOR = new Permission("train.build.destructor", PermissionDefault.OP, "The player can build train destructors");
     public static final Permission BUILD_DETECTOR = new Permission("train.build.detector", PermissionDefault.OP, "The player can build train detectors");
     public static final Permission BUILD_EJECTOR = new Permission("train.build.ejector", PermissionDefault.OP, "The player can build train ejectors");
+    public static final Permission BUILD_EJECTOR_ABSOLUTE = new Permission("train.build.ejector.absolute", PermissionDefault.OP, "The player can build train ejectors that teleport to absolute world coordinates");
     public static final Permission BUILD_PROPERTY = new Permission("train.build.property", PermissionDefault.OP, "The player can build train property setters");
     public static final Permission BUILD_COLLECTOR = new Permission("train.build.collector", PermissionDefault.OP, "The player can build systems to let trains collect from storage blocks");
     public static final Permission BUILD_DEPOSITOR = new Permission("train.build.depositor", PermissionDefault.OP, "The player can build systems to fill storage blocks with items from trains");

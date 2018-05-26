@@ -1,6 +1,5 @@
 package com.bergerkiller.bukkit.tc.rails.logic;
 
-import com.bergerkiller.bukkit.common.bases.IntVector3;
 import com.bergerkiller.bukkit.common.entity.type.CommonMinecart;
 import com.bergerkiller.bukkit.common.math.Quaternion;
 import com.bergerkiller.bukkit.common.utils.MathUtil;
@@ -19,6 +18,11 @@ public class RailLogicAir extends RailLogic {
 
     private RailLogicAir() {
         super(BlockFace.SELF);
+    }
+
+    @Override
+    public double getGravityMultiplier(MinecartMember<?> member) {
+        return MinecartMember.GRAVITY_MULTIPLIER;
     }
 
     @Override
@@ -148,45 +152,12 @@ public class RailLogicAir extends RailLogic {
     }
 
     @Override
-    public void getFixedPosition(Vector position, IntVector3 railPos) {
-        // NOP
-    }
-
-    @Override
     public void onPreMove(MinecartMember<?> member) {
         CommonMinecart<?> entity = member.getEntity();
-
-        // If we were previously on rails, check if these were sloped rails to give a Y-velocity boost
-        if (member.getRailTracker().getLastLogic() instanceof RailLogicSloped) {
-            RailLogicSloped slopedLogic = (RailLogicSloped) member.getRailTracker().getLastLogic();
-            BlockFace slopeDir = slopedLogic.getDirection();
-            double velLen = entity.vel.length();
-            double dx = slopeDir.getModX() * MathUtil.HALFROOTOFTWO * velLen;
-            double dy = MathUtil.HALFROOTOFTWO * velLen;
-            double dz = slopeDir.getModZ() * MathUtil.HALFROOTOFTWO * velLen;
-            if (slopeDir == member.getDirectionFrom()) {
-                entity.vel.set(dx, dy, dz);
-            } else {
-                entity.vel.set(-dx, -dy, -dz);
-            }
-        }
 
         // Apply flying friction
         if (!member.isMovementControlled() && member.getGroup().getProperties().isSlowingDown(SlowdownMode.FRICTION)) {
             entity.vel.multiply(entity.getFlyingVelocityMod());
         }
-
-/*
-        // Only do this logic if the head is is not moving vertically
-        // Or if this member is the head, of course
-        if (member.isMovingVerticalOnly() && entity.vel.getY() > 0.0) {
-            MinecartMember<?> head = member.getGroup().head();
-            if (member != head && head.isMovingVerticalOnly()) {
-                return;
-            }
-        }
-
-
-        */
     }
 }
